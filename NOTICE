@@ -1,0 +1,10 @@
+AI Audio Tour Agent
+Derived from Shubhamsaboo/awesome-llm-apps, voice_ai_agents/ai_audio_tour_agent
+https://github.com/Shubhamsaboo/awesome-llm-apps/tree/c62287849378babe255ebc4d8d76862389e3af3b/voice_ai_agents/ai_audio_tour_agent
+Upstream revision: c62287849378babe255ebc4d8d76862389e3af3b
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Modified September 2026 for nexttokenlab: stop-based tours, conversational
+memory, adaptive planning, source provenance, session-isolated audio,
+recorded voice questions, photo questions, demo mode, tests and documentation.
+The initial commit preserves the original source files without modification.
