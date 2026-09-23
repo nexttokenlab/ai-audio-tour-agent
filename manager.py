@@ -1,4 +1,4 @@
-"""Modified from awesome-llm-apps: research → plan → story → conversation → replan."""
+"""Modified September 2026: research → plan → story → conversation → replan."""
 
 from __future__ import annotations
 

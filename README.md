@@ -2,7 +2,7 @@
 
 An interactive tour companion: a short story at each stop, questions that remember the conversation, and a plan that adapts when your time or interests change.
 
-Derived from [Shubhamsaboo/awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps/tree/c62287849378babe255ebc4d8d76862389e3af3b/voice_ai_agents/ai_audio_tour_agent). **This README and the application have been modified.** The initial commit preserves the original project. See [NOTICE](NOTICE) and the retained [Apache 2.0 license](LICENSE).
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for modification details.
 
 ## Try it
 
@@ -31,19 +31,19 @@ For live tours, enter your OpenAI API key in the sidebar. Alternatively, copy `.
 
 In live mode, a change triggers fresh research and a new source-backed plan. Constraints without evidence are acknowledged rather than presented as verified.
 
-## What changed
+## Capabilities
 
-| Original | This version |
+| Capability | Behavior |
 |---|---|
-| One long audio recording | Short, on-demand narration for each stop, welcome and conclusion |
-| Planner output ignored | Planner weights become positive integer allocations that exactly sum to the budget |
-| Sequential expert calls | Concurrent research for selected interests |
-| One-shot text input | Follow-up questions, session memory, suggested prompts, voice recordings and optional photos |
-| Static plan | Replanning with visited/skipped exclusions and a user-updated remaining budget |
-| Hidden source provenance | Clickable references extracted from provider citation annotations |
-| Unused voice-style selector | Style affects story prompts and TTS instructions; three selectable voices |
-| Global key and shared MP3 path | Per-request clients with an explicit key; in-memory session audio |
-| No automated verification | State, agent boundary, audio and Streamlit interaction tests; GitHub Actions |
+| Stop-based narration | Short, on-demand audio for each stop, welcome and conclusion |
+| Budget allocation | Planner weights become positive integer allocations that exactly sum to the budget |
+| Specialist research | Concurrent research for selected interests |
+| Conversation | Follow-up questions, session memory, suggested prompts, voice recordings and optional photos |
+| Adaptive planning | Replanning with visited/skipped exclusions and a user-updated remaining budget |
+| Source provenance | Clickable references extracted from provider citation annotations |
+| Voice customization | Style affects story prompts and TTS instructions; three selectable voices |
+| Session isolation | Per-request clients with an explicit key; in-memory session audio |
+| Automated verification | State, agent boundary, audio and Streamlit interaction tests; GitHub Actions |
 
 ## Architecture
 

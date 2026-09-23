@@ -1,4 +1,4 @@
-"""Modified from awesome-llm-apps: grounded agent roles with per-request clients."""
+"""Modified September 2026: grounded agent roles with per-request clients."""
 
 import os
 

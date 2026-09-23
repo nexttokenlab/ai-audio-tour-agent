@@ -1,4 +1,4 @@
-"""Modified from awesome-llm-apps: interactive, session-scoped Streamlit experience."""
+"""Modified September 2026: interactive, session-scoped Streamlit experience."""
 
 from __future__ import annotations
 

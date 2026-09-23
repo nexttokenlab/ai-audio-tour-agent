@@ -4,7 +4,7 @@
 
 `TourManager` owns model execution, not state transitions. `TourSession` owns the current plan, completed/skipped places, bounded chat history, generated stories, audio bytes and usage events. Streamlit owns a single `TourSession` per browser session. No cached global OpenAI clients or global credentials are used.
 
-`agent.py` retains the upstream expert-agent idea but changes its role: experts produce compact source-cited research rather than full-length scripts. Research and structured generation are separate stages. The planner composes grounded stops; a narrator generates one stop at a time; a companion answers questions with the current stop and history.
+`agent.py` defines specialist agents that produce compact source-cited research rather than full-length scripts. Research and structured generation are separate stages. The planner composes grounded stops; a narrator generates one stop at a time; a companion answers questions with the current stop and history.
 
 ## State transitions
 
