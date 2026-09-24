@@ -45,6 +45,14 @@ In live mode, a change triggers fresh research and a new source-backed plan. Con
 | Session isolation | Per-request clients with an explicit key; in-memory session audio |
 | Automated verification | State, agent boundary, audio and Streamlit interaction tests; GitHub Actions |
 
+## Result-quality improvements
+
+- Research text carries stable source IDs next to provider-cited claims, so planning and narration can associate a fact with its reference.
+- Questions use up to four relevant reports, recent conversation and three recent stories. Archive-only references are kept for display, not treated as evidence.
+- When the companion identifies missing facts or volatile details, it performs at most one targeted search and answers again. If that remains insufficient, it explicitly abstains. This adds calls only when the model requests more evidence; it is not a factuality guarantee.
+- An empty, uncited, overlong or poorly structured story gets one revision attempt before bounded fallback or an actionable error. Successful stories remain cached.
+- Recent follow-up research is retained for reuse; older report bodies are dropped while citation provenance survives.
+
 ## Architecture
 
 ```mermaid

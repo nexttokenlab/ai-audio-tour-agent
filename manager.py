@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import json
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 
 from agents import OpenAIProvider, RunConfig, Runner
 from openai import AsyncOpenAI
 
 from agent import narrator_agent, planner_agent, question_agent, researcher
+from quality import cited_text, select_research, source_id, story_problems
 from models import Answer, INTERESTS, PlanDraft, Research, Source, STYLES, Story, TourSession, build_plan, safe_url
 
 
@@ -26,8 +27,8 @@ def citation_sources(result) -> list[Source]:
         if isinstance(value, dict):
             if value.get("type") == "url_citation" and safe_url(value.get("url", "")):
                 url = value["url"]
-                source_id = "s-" + hashlib.sha256(url.encode()).hexdigest()[:12]
-                found[source_id] = Source(id=source_id, title=value.get("title") or url, url=url)
+                sid = source_id(url)
+                found[sid] = Source(id=sid, title=value.get("title") or url, url=url)
             for item in value.values():
                 walk(item)
         elif isinstance(value, (list, tuple)):
@@ -84,6 +85,7 @@ class TourManager:
                     {
                         "location": location,
                         "requested_change": request,
+                        "as_of": datetime.now(timezone.utc).date().isoformat(),
                     }
                 ),
                 config,
@@ -91,16 +93,17 @@ class TourManager:
             sources = citation_sources(result)
             if not sources:
                 raise ValueError(f"{topic} research returned no source citations. Please retry.")
-            return Research(topic=topic, text=str(result.final_output), sources=sources)
+            return Research(topic=topic, text=cited_text(result), sources=sources)
 
         # Independent specialists run concurrently. A failed branch never becomes an empty tour.
-        results = await asyncio.gather(*(collect(topic) for topic in interests), return_exceptions=True)
+        results = await asyncio.gather(*(collect(topic) for topic in dict.fromkeys(interests)), return_exceptions=True)
         failures = [r for r in results if isinstance(r, BaseException)]
         if failures:
             raise failures[0]
         return results
 
     async def create(self, location: str, interests: list[str], minutes: int, style: str) -> TourSession:
+        event_start = len(self.events)
         if not location.strip() or not interests or any(i not in INTERESTS for i in interests):
             raise ValueError("Enter a location and select at least one supported interest.")
         if style not in STYLES or not 5 <= minutes <= 120:
@@ -131,18 +134,22 @@ class TourManager:
             style=style,
             research=research,
             remaining_minutes=minutes,
-            events=list(self.events),
+            events=list(self.events[event_start:]),
         )
 
-    def _context(self, session):
+    def _context(self, session, query=""):
+        stop = session.current
+        evidence = select_research(
+            session.research, query + " " + (stop.name if stop else ""), stop.source_ids if stop else []
+        )
         return {
             "location": session.plan.location,
             "current_stop": session.current.model_dump() if session.current else None,
             "style": STYLES[session.style],
             "visited": session.visited,
             "conversation": session.messages[-12:],
-            "earlier_stories": session.told_stories[-8:],
-            "research": [r.model_dump() for r in session.research],
+            "earlier_stories": session.told_stories[-3:],
+            "research": [r.model_dump() for r in evidence],
         }
 
     async def story(self, session: TourSession) -> Story:
@@ -154,24 +161,30 @@ class TourManager:
         ceiling = min(180, stop.minutes * 130)
         context = self._context(session)
         context["word_ceiling"] = ceiling
+        event_start = len(self.events)
+        allowed = {s["id"] for r in context["research"] for s in r["sources"]}
         async with AsyncOpenAI(api_key=self.api_key, timeout=60, max_retries=2) as client:
-            result = await self._run(narrator_agent, json.dumps(context), self._config(client))
-        story = result.final_output_as(Story)
+            config = self._config(client)
+            result = await self._run(narrator_agent, json.dumps(context), config)
+            story = result.final_output_as(Story).model_copy(deep=True)
+            problems = story_problems(story, allowed, ceiling)
+            if problems:
+                context["revision"] = {"draft": story.model_dump(), "fix": problems}
+                result = await self._run(narrator_agent, json.dumps(context), config)
+                story = result.final_output_as(Story).model_copy(deep=True)
+        # A second overlong response gets a bounded fallback; empty/uncited stories fail closed.
+        if not story.narration.strip():
+            raise ValueError("The story was empty. Please retry this stop.")
         story.narration = limit_text(story.narration, ceiling)
-        story.followups = story.followups[:3]
-        story.source_ids = self._valid_sources(story.source_ids, session)
+        story.followups = list(dict.fromkeys(q.strip() for q in story.followups if q.strip()))[:3]
+        story.source_ids = list(dict.fromkeys(s for s in story.source_ids if s in allowed))
         if not story.source_ids:
             raise ValueError("The story has no valid references. Please retry this stop.")
         session.stories[stop.id] = story
         session.told_stories.append(story.narration)
         session.told_stories = session.told_stories[-8:]
-        session.events.extend(self.events)
+        session.events.extend(self.events[event_start:])
         return story
-
-    @staticmethod
-    def _valid_sources(ids, session):
-        available = {s.id for s in session.sources}
-        return list(dict.fromkeys(i for i in ids if i in available))
 
     async def ask(
         self, session: TourSession, question: str, image: bytes | None = None, image_type: str = "image/jpeg"
@@ -180,7 +193,8 @@ class TourManager:
             raise ValueError("Type or record a question first.")
         if image and (len(image) > 5_000_000 or image_type not in {"image/jpeg", "image/png"}):
             raise ValueError("Choose a JPEG or PNG smaller than 5 MB.")
-        context = self._context(session)
+        event_start = len(self.events)
+        context = self._context(session, question)
         context["question"] = question[:2000]
         content = [{"type": "input_text", "text": json.dumps(context)}]
         if image:
@@ -191,18 +205,62 @@ class TourManager:
                     "image_url": f"data:{image_type};base64,{base64.b64encode(image).decode()}",
                 }
             )
+        extra_research = []
         async with AsyncOpenAI(api_key=self.api_key, timeout=60, max_retries=2) as client:
-            result = await self._run(question_agent, [{"role": "user", "content": content}], self._config(client))
-        answer = result.final_output_as(Answer)
+            config = self._config(client)
+            result = await self._run(question_agent, [{"role": "user", "content": content}], config)
+            answer = result.final_output_as(Answer).model_copy(deep=True)
+            if answer.needs_research:
+                self.progress("Looking up the missing details…")
+                extra_research = await self._research(
+                    session.plan.location,
+                    ["Follow-up"],
+                    json.dumps({"question": question[:2000], "current_stop": context["current_stop"]}),
+                    config,
+                )
+                context["research"] += [r.model_dump() for r in extra_research]
+                context["research_attempted"] = True
+                content[0] = {"type": "input_text", "text": json.dumps(context)}
+                result = await self._run(question_agent, [{"role": "user", "content": content}], config)
+                answer = result.final_output_as(Answer).model_copy(deep=True)
+        if not answer.text.strip():
+            raise ValueError("The answer was empty. Please retry your question.")
+        allowed = {source["id"] for report in context["research"] for source in report["sources"]}
+        invalid_citations = bool(answer.source_ids) and not any(s in allowed for s in answer.source_ids)
+        if answer.needs_research or invalid_citations:
+            answer = Answer(
+                text="I couldn’t establish that from the available sources. Please check an official source for this detail.",
+                source_ids=[],
+            )
         answer.text = limit_text(answer.text, 180)
-        answer.source_ids = self._valid_sources(answer.source_ids, session)
+        answer.source_ids = list(dict.fromkeys(s for s in answer.source_ids if s in allowed))
+        # Commit evidence only after the entire answer succeeds. Retain provenance without
+        # resending every previous follow-up report to the model.
+        if extra_research:
+            prior = [r for r in session.research if r.topic != "Follow-up"]
+            prior_followups = [r for r in session.research if r.topic == "Follow-up"]
+            recent = (prior_followups + extra_research)[-4:]
+            archived = [s for r in prior_followups[:-3] for s in r.sources]
+            if archived:
+                old_archive = [r for r in prior if r.topic == "Earlier references"]
+                archived += [s for r in old_archive for s in r.sources]
+                prior = [r for r in prior if r.topic != "Earlier references"]
+                prior.append(
+                    Research(
+                        topic="Earlier references",
+                        text="Provenance only.",
+                        sources=list({s.id: s for s in archived}.values()),
+                    )
+                )
+            session.research = prior + recent
         session.remember("user", question)
         session.remember("assistant", answer.text, answer.source_ids)
         session.answered(answer.text, answer.source_ids)
-        session.events.extend(self.events)
+        session.events.extend(self.events[event_start:])
         return answer
 
     async def replan(self, session: TourSession, minutes: int, request: str) -> None:
+        event_start = len(self.events)
         if not 1 <= minutes <= 120 or not request.strip():
             raise ValueError("Enter a change and a remaining budget between 1 and 120 minutes.")
         async with AsyncOpenAI(api_key=self.api_key, timeout=60, max_retries=2) as client:
@@ -248,4 +306,4 @@ class TourManager:
             + research,
             request,
         )
-        session.events.extend(self.events)
+        session.events.extend(self.events[event_start:])

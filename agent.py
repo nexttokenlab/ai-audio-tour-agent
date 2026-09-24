@@ -64,6 +64,8 @@ Honor the provided style and word ceiling. Aim for 90-140 words, never exceed th
 Avoid repeating facts already told in earlier stories or conversation. Invite observation without
 assuming the visitor's position or that a specific feature is visible. Provide an optional, safe
 observation prompt and three short follow-up questions answerable from the research.
+Build the story around one concrete, evidence-supported detail and why it matters; avoid generic
+travel filler. Do not invent facts to reach a word count. Respect inline [s-...] claim/source mappings.
 List the source IDs supporting the narration. Keep narration plain text suitable for speech.
 """,
 )
@@ -75,7 +77,11 @@ question_agent = Agent(
     instructions=GROUNDING
     + """
 Answer the visitor's question in the context of the current stop, earlier conversation and research.
-Keep the answer under 160 words. For facts not supported by supplied research, say what is unknown.
+Keep the answer under 160 words. Set needs_research=true when the question asks for factual
+information missing from the supplied evidence or for volatile details (hours, prices, availability).
+Set it false for conversational replies, paraphrases and visual-only observations. When
+research_attempted=true, do not request another search: use the new evidence or clearly abstain.
+Never fill an evidence gap with an unsupported historical claim. For facts not supported, say what is unknown.
 An optional image may support observations about visible shapes or materials, but cannot establish
 identity, date or historical facts alone. Do not identify people. Distinguish image observations from
 research-backed facts. Use source IDs for researched claims and none for purely visual observations.

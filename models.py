@@ -24,8 +24,11 @@ def place_key(name: str) -> str:
 
 
 def safe_url(url: str) -> bool:
-    parsed = urlparse(url)
-    return parsed.scheme in {"https", "http"} and bool(parsed.netloc) and not parsed.username
+    try:
+        parsed = urlparse(url)
+        return parsed.scheme in {"https", "http"} and bool(parsed.hostname) and not parsed.username
+    except (ValueError, TypeError):
+        return False
 
 
 class Source(BaseModel):
@@ -65,6 +68,7 @@ class Story(BaseModel):
 class Answer(BaseModel):
     text: str
     source_ids: list[str]
+    needs_research: bool = False
 
 
 class Stop(BaseModel):
@@ -92,7 +96,8 @@ def allocate_minutes(weights: list[float], total: int) -> list[int]:
     if any(not math.isfinite(w) or w <= 0 for w in weights):
         raise ValueError("Stop weights must be positive finite numbers.")
     spare = total - len(weights)
-    scaled = [spare * w / sum(weights) for w in weights]
+    normalized = [w / max(weights) for w in weights]
+    scaled = [spare * w / sum(normalized) for w in normalized]
     shares = [1 + math.floor(x) for x in scaled]
     order = sorted(range(len(weights)), key=lambda i: scaled[i] % 1, reverse=True)
     for i in order[: total - sum(shares)]:

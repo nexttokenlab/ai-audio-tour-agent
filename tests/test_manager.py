@@ -71,7 +71,7 @@ def test_story_bounded_and_cached(monkeypatch):
     assert answer.source_ids == ["demo-jaipur"]
     assert len(answer.followups) == 3
     asyncio.run(manager.story(session))
-    assert runner.await_count == 1
+    assert runner.await_count == 2
 
 
 def test_question_carries_history_and_photo_and_filters_citations(monkeypatch):

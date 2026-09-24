@@ -9,8 +9,8 @@
 ## State transitions
 
 - **Create:** validate inputs → concurrent expert research → require citation annotations → structured plan → filter unsupported/duplicate stops → allocate integer minutes → create session. A failure creates no partial session.
-- **Tell story:** return cached story if available, otherwise generate from current context → bound word count → filter source IDs → cache on success.
-- **Ask:** send current stop, research, recent messages and optional image → validate response → append user and assistant messages only on success. An unanswered question can be retried without duplicating history.
+- **Tell story:** return cached story if available, otherwise select relevant context → generate → check empty text, length, citations and suggested questions → request at most one revision → bound word count → filter source IDs → cache on success.
+- **Ask:** send current stop, up to four relevant research reports, recent messages and optional image → inspect needs_research → at most one targeted search and second answer → validate response or abstain → append evidence and messages only on success. An unanswered question can be retried without duplicating history.
 - **Finish:** add current place to visited, debit its allocated minutes, advance index.
 - **Skip:** add current place to skipped and advance without debiting the budget. Unspent time remains available for a replan.
 - **Replan:** research new constraints → propose plan → exclude completed and skipped names → validate budgets and provenance → atomically replace remaining plan. Preserve conversation and earlier reference provenance. Clear old story/audio caches so outdated narration is not reused.
@@ -24,7 +24,7 @@ Stories target roughly one minute with a hard word ceiling. The remaining stop a
 
 ## Grounding
 
-Source IDs are derived from URLs in provider `url_citation` annotations. Model-authored links cannot populate the source registry. Only HTTP(S) links without embedded credentials are rendered. Plans and stories must reference known IDs; answers can abstain or discuss an image without sources. The UI renders source links adjacent to generated passages.
+Source IDs are derived from URLs in provider `url_citation` annotations and inserted alongside cited spans using the provider’s character offsets; claim text is preserved. Model-authored links cannot populate the source registry. Only HTTP(S) links without embedded credentials are rendered. Plans and stories must reference known IDs; answers can abstain or discuss an image without sources. The UI renders source links adjacent to generated passages.
 
 This validates provenance, not factual entailment. The model can still attach the wrong known source to a claim. Add claim-level evidence spans and an independent evaluation set before describing output as verified. Prompts treat retrieved content as untrusted and prohibit invented orientation, routes and opening hours.
 
@@ -52,3 +52,9 @@ Audio bytes are stored only in the active session and keyed by content, style an
 | Photos | Input path and size constraints | Visual understanding on varied landmarks |
 | Recovery | Failed research/question/replan tests | Provider quota, refusal and network behavior |
 | Demo | Full Streamlit interaction flow | Visual browser inspection |
+
+## Bounded quality work
+
+No open-ended reflection loop is used. Story revision is capped at one additional narration call. Follow-up research is capped at one research run and one additional answer call per question. A search failure leaves conversation and evidence unchanged, allowing an explicit retry. Empty answers are rejected; unresolved evidence requests and wholly invalid citations produce an abstention. Partial citation filtering still does not validate claim entailment.
+
+Evidence selection scores query/stop terms and source overlap, preferring recent reports on ties. It retains complete reports to avoid detaching claims from citations. Four recent follow-up reports are retained; older URLs remain available to past messages through the source archive. This limits report count, not an exact token budget. Selection and the model’s decision to search need live quality evaluation.
